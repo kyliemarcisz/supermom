@@ -2,7 +2,7 @@
 import { assign, swap, pointsByKid, type Assignment, type Chore, type Kid } from "./rotation";
 import { interpret, cleanReply, findChore, T, type Ctx } from "./claude";
 import * as db from "./db";
-import { kidPhone, sendSms, smsConfigured } from "./sms";
+import { kidPhone, samePhone, sendSms, smsConfigured, twiml, validTwilioSignature } from "./sms";
 import type { AppEnv } from "./env";
 
 // illustrative "before super mom" week (see README)
@@ -27,7 +27,7 @@ export default {
         const out = await handleInbound(env, (k) => String(k.id) === String(body.kid) || k.name.toLowerCase() === String(body.kid).toLowerCase(), body.text.trim(), "sim");
         return out ? json(out) : json({ error: "unknown kid" }, 404);
       }
-      if (p === "/sms" && m === "POST") return new Response("<Response></Response>", { headers: { "content-type": "text/xml" } });
+      if (p === "/sms" && m === "POST") return inboundSms(req, env);
       if (p.startsWith("/api/")) return json({ error: "not found" }, 404);
       return env.ASSETS.fetch(req);
     } catch (e) {
@@ -111,6 +111,23 @@ async function doAssign(env: AppEnv) {
   }
   await db.addActivity(env.DB, "assign", `chores sent: ${s.kids.map((k) => `${k.name.toLowerCase()} ${pts.get(k.id) ?? 0} pts`).join(", ")}`);
   return { ok: true };
+}
+
+// ---------- twilio webhook ----------
+
+async function inboundSms(req: Request, env: AppEnv): Promise<Response> {
+  const form = await req.formData();
+  const params: Record<string, string> = {};
+  form.forEach((v, k) => (params[k] = String(v)));
+  // check twilio's signature whenever we have the auth token to check it with
+  if (env.TWILIO_AUTH_TOKEN && !(await validTwilioSignature(env.TWILIO_AUTH_TOKEN, req.url, params, req.headers.get("x-twilio-signature")))) {
+    return new Response("bad signature", { status: 403 });
+  }
+  const from = params.From;
+  const text = (params.Body ?? "").trim();
+  if (!from || !text) return twiml(null);
+  const out = await handleInbound(env, (k) => samePhone(kidPhone(env, k), from), text, "sms");
+  return twiml(out ? out.reply : "hi! this number isn't on a super mom family yet.");
 }
 
 // ---------- inbound text (simulated phone or twilio) ----------
