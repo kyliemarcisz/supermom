@@ -139,7 +139,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 6px 40px 40px; }
 .phone-head { display: flex; align-items: center; gap: 10px; padding: 0 6px 12px; border-bottom: 1px solid var(--line); }
 .avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-family: "Instrument Serif", serif; font-size: 18px; background: var(--milk); border: 1.5px solid var(--kid); }
 .phone-head b { font-weight: 500; text-transform: lowercase; display: block; line-height: 1.2; }
-.chat { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 14px 4px 10px; scroll-behavior: smooth; }
+.chat { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 14px 4px 10px; }
 .chat-empty { margin: auto; text-align: center; color: var(--muted); font-size: 12.5px; max-width: 200px; }
 .bubble { max-width: 84%; padding: 9px 13px; border-radius: 18px; font-size: 13.5px; line-height: 1.42; overflow-wrap: anywhere; }
 .bubble.app { align-self: flex-start; background: var(--milk); border: 1px solid var(--line); border-bottom-left-radius: 6px; }

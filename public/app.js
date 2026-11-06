@@ -237,7 +237,7 @@
     // a money offer: do the sibling's biggest open chore, priced at its points
     const sibLeft = sib ? S.chores.filter((c) => c.kidId === sib.id && !c.done) : [];
     if (sib && sibLeft[0]) chips.push(`i'll do ${lc(sib.name)}'s ${short(sibLeft[0].name)} for $${sibLeft[0].points}`);
-    chips.push(left.length ? "i have practice tonight" : "what's left?");
+    if (chips.length < 3) chips.push(left.length ? "i have practice tonight" : "what's left?");
     return chips;
   }
 
