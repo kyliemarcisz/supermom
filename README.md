@@ -40,6 +40,8 @@ The planning, assigning and reminding is invisible work, and it usually lands on
 
 The **"before"** view is an **illustrative baseline**, not measured data: Maya 11 points and Jake 5 points (69% vs 31%), 14 parent reminders, 9 of 16 tasks done.
 
+![fairness dashboard: a 50/50 split, 0% sibling gap and 0 parent reminders](docs/fairness.png)
+
 ## architecture
 
 ```mermaid
@@ -48,14 +50,16 @@ flowchart LR
   K[kid's phone] -- SMS --> T[Twilio]
   T -- "POST /sms (form)" --> W
   W -- "TwiML reply" --> T
-  W[Cloudflare Worker<br/>src/index.ts] --> R[rotation.ts<br/>fair assign + swap]
+  W[Cloudflare Worker<br/>src/index.ts] --> R[rotation.ts<br/>fair assign, swaps, bids]
   W --> C[claude.ts<br/>Claude Haiku 5.5 or keyword rules]
   W --> S[sms.ts<br/>Twilio REST]
-  W --> D[(D1<br/>kids, chores, assignments,<br/>messages, activity)]
+  W --> D[(D1<br/>kids, chores, assignments,<br/>bids, messages, activity)]
 ```
 
+**How a text is read:** the Worker sends Claude the kid's text plus this week's chores, a preview of what each swap would give back, and any offer waiting on that kid. Claude returns JSON in a fixed schema: `{intent, chore, to, price, offer, reply}`, with intent one of `done`, `swap`, `excuse`, `question`, `offer`, `accept` or `decline`. The server checks every claim against real state before changing anything, so a wrong guess can't move the wrong chore. If the call fails, or there's no key, keyword rules take over and the demo keeps working.
+
 - `src/index.ts`: router and the glue between the modules
-- `src/rotation.ts`: pure functions for fair assignment and fair swaps
+- `src/rotation.ts`: pure functions for fair assignment, fair swaps and chore bids
 - `src/claude.ts`: prompt, JSON schema, parsing, reply cleanup, keyword fallback
 - `src/sms.ts`: Twilio send, TwiML, signature check
 - `src/db.ts`: every D1 query
@@ -81,7 +85,7 @@ npm test                  # 34 vitest tests
 ```bash
 npx wrangler login
 npx wrangler d1 create supermom          # paste the database_id into wrangler.jsonc
-npm run db:remote                        # apply migrations + seed
+npm run db:remote                        # apply migrations 0001 to 0003 + seed
 npx wrangler deploy                      # https://supermom.<you>.workers.dev
 ```
 
@@ -95,6 +99,8 @@ npx wrangler secret put TWILIO_FROM           # your Twilio number, e.g. +155512
 npx wrangler secret put PHONE_MAYA            # kid phones, override the kids table
 npx wrangler secret put PHONE_JAKE
 ```
+
+Run these from the project folder. Type the secret's **name** after `secret put` exactly as shown, then paste the value when Wrangler asks `Enter a secret value`. Run them in a normal terminal, because the prompt needs keyboard input.
 
 `CLAUDE_MODEL` defaults to `claude-haiku-5-5` and can be changed in `wrangler.jsonc`.
 
