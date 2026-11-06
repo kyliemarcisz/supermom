@@ -1,3 +1,87 @@
 <!doctype html>
-<html lang="en"><meta charset="utf-8"><title>super mom</title>
-<body><p>super mom is warming up.</p></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>super mom · fair chores, no nagging</title>
+  <meta name="description" content="a fair chore tracker that texts kids their chores and reads their replies.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 19.6s-7-4.2-7.1-9.1C4.9 8 6.7 6.3 8.9 6.3c1.4 0 2.5.7 3.1 1.9.6-1.2 1.7-2 3.1-2 2.2 0 3.9 1.9 3.9 4.4 0 4.9-7 9-7 9z' fill='none' stroke='%23C98B6B' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Instrument+Serif&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/" aria-label="super mom home"><span class="wordmark">super mom</span><span id="brand-heart"></span></a>
+    <nav class="tabs" role="tablist" aria-label="sections">
+      <button role="tab" data-tab="fairness" aria-selected="true">fairness</button>
+      <button role="tab" data-tab="phones" aria-selected="false">kids' phones</button>
+      <button role="tab" data-tab="chores" aria-selected="false">chores</button>
+    </nav>
+    <div class="actions">
+      <span class="badge" id="badge-claude">claude</span>
+      <span class="badge" id="badge-sms">sms</span>
+      <button class="pill" id="assign">assign &amp; text kids</button>
+      <button class="link" id="reset" title="clear this week and start the demo over">reset</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="tab" id="tab-fairness" role="tabpanel">
+      <div class="fair-grid">
+        <div class="card load">
+          <div class="card-head">
+            <div>
+              <h2 class="title">who's carrying the load?<span class="sq"></span></h2>
+              <p class="muted small" id="load-sub">effort points this week</p>
+            </div>
+            <div class="toggle" role="group" aria-label="compare">
+              <button data-view="before" aria-pressed="false">before</button>
+              <button data-view="after" aria-pressed="true">with super mom</button>
+            </div>
+          </div>
+          <div id="load-body"></div>
+          <p class="note hand" id="load-note"></p>
+        </div>
+
+        <div class="stats">
+          <div class="card stat"><span class="label">sibling gap</span><span class="big" id="stat-gap"></span><span class="muted small" id="stat-gap-sub"></span></div>
+          <div class="card stat"><span class="label">chores done</span><span class="big" id="stat-done"></span><span class="muted small" id="stat-done-sub"></span></div>
+          <div class="card stat"><span class="label">parent reminders</span><span class="big" id="stat-rem"></span><span class="muted small" id="stat-rem-sub"></span></div>
+        </div>
+
+        <div class="card feed">
+          <h3>this week so far</h3>
+          <ul id="feed"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab" id="tab-phones" role="tabpanel" hidden>
+      <div class="phones-wrap">
+        <div id="phones" style="display:contents"></div>
+        <aside class="card board">
+          <h3 class="title">live board<span class="sq"></span></h3>
+          <div id="board"></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="tab" id="tab-chores" role="tabpanel" hidden>
+      <div class="section-head">
+        <div>
+          <h2 class="title">this week's chores<span class="sq"></span></h2>
+          <p class="muted small" style="margin:8px 0 0">harder chores are worth more points. the hardest go out first, each to whoever has the fewest.</p>
+        </div>
+        <span class="hand">fair &amp; square</span>
+      </div>
+      <div class="chore-grid" id="chore-grid"></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/doodles.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
