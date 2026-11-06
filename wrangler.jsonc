@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "supermom",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "19200c92-b13d-44cc-8ef8-d58b464b7172",
       "migrations_dir": "migrations"
     }
   ],
