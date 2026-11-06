@@ -197,7 +197,7 @@ const SCHEMA = {
     intent: { type: "string", enum: INTENTS },
     chore: { type: ["string", "null"] },
     price: { type: ["number", "null"] },
-    offer: { type: ["string", "null"], enum: ["do", "pay", null] },
+    offer: { type: ["string", "null"] }, // "do" | "pay", checked in parseClaudeJson
     to: { type: ["string", "null"] },
     reply: { type: "string" },
   },
