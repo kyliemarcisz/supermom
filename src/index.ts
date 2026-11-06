@@ -1,6 +1,6 @@
 // router + the glue between rotation, claude, sms and d1.
-import { assign, swap, pointsByKid, type Assignment, type Chore, type Kid } from "./rotation";
-import { interpret, cleanReply, findChore, T, type Ctx } from "./claude";
+import { assign, swap, pointsByKid, bidParties, bidProblem, earnings, type Assignment, type Bid, type Chore, type Kid } from "./rotation";
+import { interpret, cleanReply, findChore, money, parsePrice, T, type Ctx } from "./claude";
 import * as db from "./db";
 import { kidPhone, samePhone, sendSms, smsConfigured, twiml, validTwilioSignature } from "./sms";
 import type { AppEnv } from "./env";
@@ -41,6 +41,7 @@ export default {
 
 const toKids = (s: db.Snapshot): Kid[] => s.kids.map((k) => ({ id: k.id, name: k.name, lastWeekPoints: k.last_week_points }));
 const toChores = (s: db.Snapshot): Chore[] => s.chores.map((c) => ({ id: c.id, name: c.name, points: c.points, sort: c.sort }));
+const toBids = (s: db.Snapshot): Bid[] => s.bids.map((b) => ({ choreId: b.chore_id, fromKid: b.from_kid, toKid: b.to_kid, kind: b.kind, cents: b.cents, status: b.status }));
 const toAssignments = (s: db.Snapshot): Assignment[] => s.assignments.map((a) => ({ choreId: a.chore_id, kidId: a.kid_id, done: !!a.done }));
 
 /** record an outgoing text, and send it for real when twilio is live. */
@@ -71,6 +72,19 @@ async function state(env: AppEnv) {
       count: mine.length,
     };
   });
+  const money = earnings(toBids(s));
+  for (const k of kids) Object.assign(k, { earnedCents: money.get(k.id)?.earned ?? 0, paidCents: money.get(k.id)?.paid ?? 0 });
+  const kidName = new Map(s.kids.map((k) => [k.id, k.name]));
+  const bids = s.bids.map((b) => ({
+    id: b.id,
+    chore: choreById.get(b.chore_id)?.name ?? "",
+    from: kidName.get(b.from_kid) ?? "",
+    to: kidName.get(b.to_kid) ?? "",
+    toKid: b.to_kid,
+    kind: b.kind,
+    price: b.cents / 100,
+    status: b.status,
+  }));
   const vals = kids.map((k) => k.points);
   const assigned = s.assignments.length > 0;
 
@@ -82,6 +96,7 @@ async function state(env: AppEnv) {
       const a = s.assignments.find((x) => x.chore_id === c.id);
       return { id: c.id, name: c.name, points: c.points, icon: c.icon, kidId: a?.kid_id ?? null, done: !!a?.done, swappedFrom: a?.swapped_from ?? null };
     }),
+    bids,
     messages: s.messages,
     activity: s.activity,
     stats: {
@@ -146,6 +161,7 @@ export async function handleInbound(env: AppEnv, match: (k: db.KidRow) => boolea
   const mine = as.filter((a) => a.kidId === kid.id);
   const left = () => mine.filter((a) => !a.done).map((a) => byId.get(a.choreId)!.name);
 
+  const openBidRow = [...s.bids].reverse().find((b) => b.status === "open" && b.to_kid === kid.id) ?? null;
   const ctx: Ctx = {
     kid: kid.name,
     siblings: siblings.map((k) => k.name),
@@ -158,6 +174,9 @@ export async function handleInbound(env: AppEnv, match: (k: db.KidRow) => boolea
           return { chore: byId.get(a.choreId)!.name, to: sib.name, giveBack: r.ok && r.givenBackChoreId ? byId.get(r.givenBackChoreId)!.name : null };
         }),
       ),
+    openBid: openBidRow
+      ? { from: kidName.get(openBidRow.from_kid)!, chore: byId.get(openBidRow.chore_id)!.name, kind: openBidRow.kind, price: openBidRow.cents / 100 }
+      : null,
     text,
   };
 
@@ -196,10 +215,49 @@ export async function handleInbound(env: AppEnv, match: (k: db.KidRow) => boolea
     } else {
       reply = T.swapFail(to?.name ?? siblings[0]?.name ?? "your sibling", left());
     }
+  } else if (result.intent === "offer") {
+    const to = siblings.find((k) => k.name.toLowerCase() === result.to?.toLowerCase()) ?? (siblings.length === 1 ? siblings[0] : undefined);
+    const kind = result.offer ?? (/\b(pay|give)\b/i.test(text) ? "pay" : "do");
+    const price = result.price ?? parsePrice(text);
+    const bid = to && chore ? { choreId: chore.id, fromKid: kid.id, toKid: to.id, kind } : null;
+    if (to && chore && price && bid && !bidProblem(as, bid)) {
+      await db.addBid(env.DB, { ...bid, cents: Math.round(price * 100) });
+      await db.addActivity(env.DB, "offer", `${kid.name.toLowerCase()} ${kind === "do" ? "offered to do" : "offered to pay for"} ${chore.name.toLowerCase()} for ${money(price)}`);
+      await deliver(env, to, cleanReply(T.bidAsk(to.name, kid.name, kind, chore.name, price)), "offer");
+      reply = T.bidSent(to.name);
+    } else {
+      reply = T.bidBad(kind, to?.name ?? siblings[0]?.name ?? "your sibling");
+    }
+  } else if (result.intent === "accept" || result.intent === "decline") {
+    const bidder = openBidRow && s.kids.find((k) => k.id === openBidRow.from_kid);
+    const bChore = openBidRow && byId.get(openBidRow.chore_id);
+    if (!openBidRow || !bidder || !bChore) {
+      reply = T.noBid();
+    } else if (result.intent === "decline") {
+      await db.resolveBid(env.DB, openBidRow.id, "declined");
+      await deliver(env, bidder, cleanReply(T.bidDeclined(kid.name, bChore.name)), "decline");
+      reply = T.bidNoted(bidder.name);
+    } else {
+      const b = { choreId: openBidRow.chore_id, fromKid: openBidRow.from_kid, toKid: openBidRow.to_kid, kind: openBidRow.kind };
+      if (bidProblem(as, b)) {
+        await db.resolveBid(env.DB, openBidRow.id, "declined");
+        reply = `that offer expired, the ${bChore.name.toLowerCase()} already changed hands.`;
+      } else {
+        const { doer, payer } = bidParties(b);
+        await db.resolveBid(env.DB, openBidRow.id, "accepted");
+        await db.moveChores(env.DB, [{ choreId: bChore.id, kidId: doer, swappedFrom: payer }]);
+        const price = openBidRow.cents / 100;
+        const deal = T.bidDeal(kidName.get(doer)!, bChore.name, price, kidName.get(payer)!);
+        await db.addActivity(env.DB, "deal", `${kidName.get(doer)!.toLowerCase()} took ${bChore.name.toLowerCase()} for ${money(price)} from ${kidName.get(payer)!.toLowerCase()}`);
+        await deliver(env, bidder, cleanReply(deal), "accept");
+        reply = deal;
+      }
+    }
   } else if (result.intent === "excuse") {
     await db.addActivity(env.DB, "excuse", `${kid.name.toLowerCase()}: "${text.slice(0, 60)}"`);
   }
 
+  if (!reply.trim()) reply = T.question(kid.name, left());
   reply = cleanReply(reply);
   await db.addMessage(env.DB, kid.id, "out", reply, result.intent, via);
   return { intent: result.intent, chore: chore?.name ?? null, reply, source };

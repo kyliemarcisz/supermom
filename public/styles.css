@@ -220,3 +220,13 @@ main { max-width: 1240px; margin: 0 auto; padding: 6px 40px 40px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
+/* ---------- bids ---------- */
+.earned { font-weight: 500; color: var(--cocoa); }
+.offers { padding-top: 14px; border-top: 1px dashed var(--line); margin-top: 4px; }
+.offers .label { display: block; margin-bottom: 8px; }
+.mini.bids li { grid-template-columns: 1fr auto auto; font-size: 13px; }
+.mini.bids .price { font-family: "Instrument Serif", serif; font-size: 18px; }
+.bid-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.bid-tag.deal { font-size: 15px; color: var(--sage); border-color: transparent; padding: 0 2px; }
+.phone .chips .chip:only-child, .phone .chips .chip:first-child:nth-last-child(2) { font-weight: 500; }
