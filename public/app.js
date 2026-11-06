@@ -52,6 +52,7 @@
   // ---------- helpers ----------
   const color = (kidId) => COLORS[Math.max(0, S.kids.findIndex((k) => k.id === kidId)) % COLORS.length];
   const kidById = (id) => S.kids.find((k) => k.id === id);
+  const dollars = (cents) => `$${cents % 100 ? (cents / 100).toFixed(2) : cents / 100}`;
   const circled = (html) => `<span class="circled">${html}${doodle("circle")}</span>`;
   function animatePencils(root) {
     requestAnimationFrame(() =>
@@ -113,7 +114,7 @@
           const done = view === "before" ? "" : `${k.done} of ${k.count} done`;
           return `<div class="kid-row rise" style="--kid:${color(k.id)}">
             <div class="kid-name"><span class="dot"></span>${esc(lc(k.name))}</div>
-            <div class="kid-bar">${pencil(share, color(k.id))}<div class="meta muted small"><span>${k.points} pts</span><span>${done}</span></div></div>
+            <div class="kid-bar">${pencil(share, color(k.id))}<div class="meta muted small"><span>${k.points} pts${view === "after" && k.earnedCents ? ` · <b class="earned">earned ${dollars(k.earnedCents)}</b>` : ""}${view === "after" && k.paidCents ? ` · paid ${dollars(k.paidCents)}` : ""}</span><span>${done}</span></div></div>
             <div class="kid-num"><span class="pct">${share}%</span><span class="muted">of the work</span></div>
           </div>`;
         })
@@ -128,7 +129,14 @@
       } else {
         const even = d.gap === 0;
         const allDone = d.count > 0 && d.done === d.count;
-        note.textContent = allDone ? "every chore done. nice work, team!" : even ? "fair & square ✓" : "close to even. swaps keep it fair";
+        const earner = [...d.kids].sort((a, b) => (b.earnedCents || 0) - (a.earnedCents || 0))[0];
+        note.textContent = allDone
+          ? "every chore done. nice work, team!"
+          : even
+            ? "fair & square ✓"
+            : earner && earner.earnedCents
+              ? `${lc(earner.name)} chose extra work and earned ${dollars(earner.earnedCents)}`
+              : "close to even. swaps keep it fair";
         note.className = "note hand calm";
       }
     }
@@ -221,9 +229,14 @@
     if (!S.assigned) return ["what are my chores?"];
     const left = S.chores.filter((c) => c.kidId === kid.id && !c.done);
     const sib = S.kids.find((k) => k.id !== kid.id);
+    const waiting = (S.bids || []).some((b) => b.status === "open" && b.toKid === kid.id);
+    if (waiting) return ["deal!", "no thanks"];
     const chips = [];
     if (left[0]) chips.push(`done with ${short(left[0].name)}`);
     if (sib && left.length) chips.push(`can ${lc(sib.name)} do ${choreObject(left[left.length - 1].name)} tonight? i have practice`);
+    // a money offer: do the sibling's biggest open chore, priced at its points
+    const sibLeft = sib ? S.chores.filter((c) => c.kidId === sib.id && !c.done) : [];
+    if (sib && sibLeft[0]) chips.push(`i'll do ${lc(sib.name)}'s ${short(sibLeft[0].name)} for $${sibLeft[0].points}`);
     chips.push(left.length ? "i have practice tonight" : "what's left?");
     return chips;
   }
@@ -246,7 +259,18 @@
             .join("")}</ul>
         </div>`;
       })
-      .join("");
+      .join("") + renderOffers();
+  }
+
+  function renderOffers() {
+    const bids = S.bids || [];
+    if (!bids.length) return "";
+    const row = (b) => {
+      const what = b.kind === "do" ? `${lc(b.from)} does ${lc(b.to)}'s ${lc(b.chore)}` : `${lc(b.from)} pays ${lc(b.to)} to do ${lc(b.chore)}`;
+      const tag = b.status === "open" ? `<span class="bid-tag">waiting on ${esc(lc(b.to))}</span>` : `<span class="bid-tag deal hand">deal ✓</span>`;
+      return `<li><span>${esc(what)}</span><span class="price">$${b.price}</span>${tag}</li>`;
+    };
+    return `<div class="offers"><span class="label">offers</span><ul class="mini bids">${bids.slice(-4).reverse().map(row).join("")}</ul></div>`;
   }
 
   function renderChores() {

@@ -32,6 +32,7 @@ The planning, assigning and reminding is invisible work, and it usually lands on
 | one-tap texts | **assign & text kids** sends each kid their list by SMS (Twilio) or to the simulated phones. |
 | claude reads replies | each text is classified as `done`, `swap`, `excuse` or `question`. claude returns JSON `{intent, chore, to, reply}` and the server checks it against real state before updating anything. replies are warm, lowercase, under 35 words, and never use em dashes. |
 | fair swaps | "can maya do the table?" moves the chore to the sibling, who hands back their unfinished chore closest in points, so totals stay even. the sibling gets a heads-up text. |
+| chore bids | kids can trade chores for money. "i'll do jake's dishes for $3" or "i'll pay maya $4 to do my bathroom" texts the sibling, who replies "deal" or "no thanks". the chore and its points move to whoever does the work, and the dashboard shows what each kid earned and paid, so extra work is chosen and paid, never assumed. |
 | fairness dashboard | points per kid, sibling gap, chores done and parent reminders, with a before/after toggle. |
 | simulated phones | two phones with chat bubbles and quick-reply chips, so the demo works without real SMS. |
 | demo mode | no `ANTHROPIC_API_KEY`: keyword rules read the texts. no Twilio credentials: texts go to the simulated phones only. badges show `claude on / demo` and `sms live / simulated`. |
@@ -72,7 +73,7 @@ npm install
 npm run db:local          # create + seed the local D1 database
 cp .dev.vars.example .dev.vars   # optional: add keys, blank = demo mode
 npx wrangler dev          # http://localhost:8787
-npm test                  # 26 vitest tests
+npm test                  # 34 vitest tests
 ```
 
 ### deploy to Cloudflare
@@ -121,7 +122,8 @@ The worker checks `X-Twilio-Signature` whenever `TWILIO_AUTH_TOKEN` is set. Tria
 3. **Click "assign & text kids":** an even 8/8 split, and both kids get a text.
 4. **Kids' phones:** Maya taps "done with laundry". Jake taps "can maya do the table tonight? i have practice". Claude handles both, Maya gets a heads-up, and the swap stays fair (Jake takes the trash back).
 5. **Back to fairness:** a 50/50 split and 0 reminders.
-6. **Close:** "super mom gives moms their time back and teaches the next generation that chores aren't a girl's job."
+6. **Bonus, chore bids:** Maya taps "i'll do jake's bathroom for $4" and Jake taps "deal!". "and if a kid wants extra work, they get paid for it. chosen and paid, never assumed."
+7. **Close:** "super mom gives moms their time back and teaches the next generation that chores aren't a girl's job."
 
 Tap **reset** to run it again.
 

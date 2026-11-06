@@ -1,7 +1,16 @@
 // reads a kid's text: claude when ANTHROPIC_API_KEY is set, keyword rules otherwise.
 
-export type Intent = "done" | "swap" | "excuse" | "question";
-export interface Interpretation { intent: Intent; chore: string | null; to: string | null; reply: string }
+export type Intent = "done" | "swap" | "excuse" | "question" | "offer" | "accept" | "decline";
+export type OfferKind = "do" | "pay";
+export interface Interpretation {
+  intent: Intent;
+  chore: string | null;
+  to: string | null;
+  reply: string;
+  price?: number | null; // dollars, for offers
+  offer?: OfferKind | null; // "do": i'll do your chore for $x. "pay": i'll pay $x if you do mine.
+}
+export interface OpenBid { from: string; chore: string; kind: OfferKind; price: number }
 
 export interface ChoreInfo { name: string; points: number; done: boolean; owner: string }
 export interface Ctx {
@@ -9,10 +18,11 @@ export interface Ctx {
   siblings: string[];
   chores: ChoreInfo[]; // everyone's chores this week
   swapPreview: { chore: string; to: string; giveBack: string | null }[];
+  openBid?: OpenBid | null; // latest open offer waiting on this kid's "deal"
   text: string;
 }
 
-const INTENTS: Intent[] = ["done", "swap", "excuse", "question"];
+const INTENTS: Intent[] = ["done", "swap", "excuse", "question", "offer", "accept", "decline"];
 
 // ---------- reply copy (shared by fallback + server corrections) ----------
 
@@ -21,6 +31,13 @@ export const shortName = (chore: string) => lc(chore).split(" ").pop()!;
 const OBJECT: Record<string, string> = { vacuum: "the vacuuming", dog: "dog duty" };
 /** "dishes" -> "the dishes", for "can jake do the dishes?" */
 export const choreObject = (chore: string) => OBJECT[shortName(chore)] ?? `the ${shortName(chore)}`;
+export const money = (dollars: number) => `$${Number.isInteger(dollars) ? dollars : dollars.toFixed(2)}`;
+/** "$3", "3 dollars", "3 bucks" -> 3 */
+export function parsePrice(text: string): number | null {
+  const m = text.match(/\$\s?(\d+(?:\.\d{1,2})?)/) ?? text.match(/\b(\d+(?:\.\d{1,2})?)\s?(?:dollars?|bucks?)\b/i);
+  const n = m ? Number(m[1]) : NaN;
+  return n > 0 && n <= 100 ? n : null;
+}
 const list = (names: string[]) => {
   const n = names.map(lc);
   return n.length <= 1 ? n.join("") : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
@@ -54,6 +71,21 @@ export const T = {
       : `no stress, ${lc(kid)}. thanks for telling me. do what you can when you can 💛`,
   question: (kid: string, left: string[]) =>
     left.length ? `you've got ${list(left)} left this week. text me "done with ..." when you finish!` : `you're all done this week, ${lc(kid)}! enjoy 🌿`,
+  // ---- bids ----
+  bidAsk: (to: string, from: string, kind: OfferKind, chore: string, price: number) =>
+    kind === "do"
+      ? `${lc(from)} offers to do your ${lc(chore)} for ${money(price)}. reply "deal" or "no thanks".`
+      : `${lc(from)} will pay you ${money(price)} to do their ${lc(chore)}. reply "deal" or "no thanks".`,
+  bidSent: (to: string) => `offer sent! i'll tell you when ${lc(to)} answers.`,
+  bidBad: (kind: OfferKind, sib: string) =>
+    kind === "do"
+      ? `which of ${lc(sib)}'s chores? try "i'll do ${lc(sib)}'s dishes for $3".`
+      : `which of your chores? try "i'll pay ${lc(sib)} $2 to do my trash".`,
+  bidDeal: (doer: string, chore: string, price: number, payer: string) =>
+    `deal! ${lc(doer)} does ${lc(chore)} and ${lc(payer)} pays ${money(price)}. the points go to whoever does the work 🤝`,
+  bidNoted: (from: string) => `no worries, i'll let ${lc(from)} know.`,
+  bidDeclined: (who: string, chore: string) => `${lc(who)} passed on the ${lc(chore)} offer. maybe try a different price?`,
+  noBid: () => `there's no offer waiting for you right now.`,
   notAssigned: () => `chores aren't out yet this week. i'll text you as soon as they are!`,
 };
 
@@ -93,6 +125,17 @@ export function keywordInterpret(ctx: Ctx): Interpretation {
   const sib = ctx.siblings.find((s) => new RegExp(`\\b${lc(s)}\\b`).test(t)) ?? null;
   const chore = findChore(t, ctx.chores.map((c) => c.name));
 
+  // bids come first: answering an open offer, then making a new one
+  if (ctx.openBid) {
+    if (/^\s*(deal|yes|yep|yeah|ok|okay|sure|accept|i accept)\b/.test(t)) return { intent: "accept", chore: ctx.openBid.chore, to: ctx.openBid.from, reply: "" };
+    if (/^\s*(no|nope|nah|pass|decline)\b|no thanks/.test(t)) return { intent: "decline", chore: ctx.openBid.chore, to: ctx.openBid.from, reply: T.bidNoted(ctx.openBid.from) };
+  }
+  const price = parsePrice(t);
+  if (price !== null) {
+    const kind: OfferKind = /\b(pay|give)\b/.test(t) ? "pay" : "do";
+    const to = sib ?? ctx.siblings[0] ?? null;
+    return { intent: "offer", chore, to, price, offer: kind, reply: to ? T.bidSent(to) : "" };
+  }
   const asksSwap = /\b(swap|trade|switch)\b/.test(t) || (sib !== null && /\b(can|could|would|will|take|do)\b/.test(t));
   if (asksSwap) {
     const to = sib ?? ctx.siblings[0] ?? null;
@@ -126,7 +169,12 @@ reply: your text back to the kid. warm, casual, all lowercase, under 35 words, a
 - done: celebrate and mention what is still on their list.
 - swap: use the swap preview to say exactly which chore they get back, and that points stay even.
 - excuse: be kind and suggest a fair swap with a sibling.
-- question: answer from their chore list.`;
+- question: answer from their chore list.
+bids: kids can trade chores for money.
+- intent "offer": the text names a price. offer "do" = they will do a sibling's chore for that price. offer "pay" = they will pay a sibling to do one of their own chores. price = the dollar amount as a number. chore = the chore. to = the sibling.
+- intent "accept" / "decline": they answer the open offer below with yes/deal or no.
+- for offer, accept and decline the server writes the reply, so reply can be short.
+for every other intent, price and offer are null.`;
 
 export function buildUserPrompt(ctx: Ctx): string {
   const line = (c: ChoreInfo) => `- ${c.name} (${c.points} pts, ${c.owner}, ${c.done ? "done" : "not done"})`;
@@ -138,6 +186,7 @@ export function buildUserPrompt(ctx: Ctx): string {
     `siblings: ${ctx.siblings.join(", ") || "none"}`,
     `this week's chores:\n${ctx.chores.map(line).join("\n") || "- not assigned yet"}`,
     `swap preview (if ${ctx.kid} hands a chore to a sibling, the sibling gives back their unfinished chore closest in points):\n${preview}`,
+    `open offer waiting on ${ctx.kid}: ${ctx.openBid ? `${ctx.openBid.from} ${ctx.openBid.kind === "do" ? "offers to do" : "will pay to have done"} ${ctx.openBid.chore} for ${money(ctx.openBid.price)}` : "none"}`,
     `text from ${ctx.kid}: ${JSON.stringify(ctx.text)}`,
   ].join("\n\n");
 }
@@ -147,10 +196,12 @@ const SCHEMA = {
   properties: {
     intent: { type: "string", enum: INTENTS },
     chore: { type: ["string", "null"] },
+    price: { type: ["number", "null"] },
+    offer: { type: ["string", "null"], enum: ["do", "pay", null] },
     to: { type: ["string", "null"] },
     reply: { type: "string" },
   },
-  required: ["intent", "chore", "to", "reply"],
+  required: ["intent", "chore", "to", "reply", "price", "offer"],
   additionalProperties: false,
 };
 
@@ -159,12 +210,14 @@ export function parseClaudeJson(text: string): Interpretation | null {
   if (!raw) return null;
   try {
     const o = JSON.parse(raw);
-    if (!INTENTS.includes(o.intent) || typeof o.reply !== "string" || !o.reply.trim()) return null;
+    if (!INTENTS.includes(o.intent) || typeof o.reply !== "string") return null;
     return {
       intent: o.intent,
       chore: typeof o.chore === "string" && o.chore ? o.chore : null,
       to: typeof o.to === "string" && o.to ? o.to : null,
       reply: o.reply,
+      price: typeof o.price === "number" && o.price > 0 ? o.price : null,
+      offer: o.offer === "do" || o.offer === "pay" ? o.offer : null,
     };
   } catch {
     return null;

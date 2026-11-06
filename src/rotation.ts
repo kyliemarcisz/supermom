@@ -64,3 +64,41 @@ export function swap(
   });
   return { ok: true, assignments: next, movedChoreId: choreId, givenBackChoreId: giveBack?.choreId ?? null };
 }
+
+// ---------- bids: trade a chore for money ----------
+
+export interface Bid { choreId: number; fromKid: number; toKid: number; kind: "do" | "pay"; cents: number; status: string }
+
+/** "do": the bidder does the other kid's chore and gets paid. "pay": the bidder pays the other kid to do theirs. */
+export function bidParties(b: Pick<Bid, "fromKid" | "toKid" | "kind">): { doer: number; payer: number } {
+  return b.kind === "do" ? { doer: b.fromKid, payer: b.toKid } : { doer: b.toKid, payer: b.fromKid };
+}
+
+/** why a bid can't go through, or null if it can. the payer must own the chore and it must be unfinished. */
+export function bidProblem(assignments: Assignment[], b: Pick<Bid, "choreId" | "fromKid" | "toKid" | "kind">): string | null {
+  if (b.fromKid === b.toKid) return "same kid";
+  const a = assignments.find((x) => x.choreId === b.choreId);
+  if (!a) return "no such chore";
+  if (a.done) return "already done";
+  if (a.kidId !== bidParties(b).payer) return "wrong owner";
+  return null;
+}
+
+/** settle an accepted bid: the chore (and its points) moves to whoever does the work. */
+export function settleBid(assignments: Assignment[], b: Bid): Assignment[] {
+  const { doer } = bidParties(b);
+  return assignments.map((a) => (a.choreId === b.choreId ? { ...a, kidId: doer } : { ...a }));
+}
+
+/** cents earned and paid per kid, from accepted bids only. */
+export function earnings(bids: Bid[]): Map<number, { earned: number; paid: number }> {
+  const out = new Map<number, { earned: number; paid: number }>();
+  const get = (id: number) => out.get(id) ?? (out.set(id, { earned: 0, paid: 0 }), out.get(id)!);
+  for (const b of bids) {
+    if (b.status !== "accepted") continue;
+    const { doer, payer } = bidParties(b);
+    get(doer).earned += b.cents;
+    get(payer).paid += b.cents;
+  }
+  return out;
+}
