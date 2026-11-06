@@ -122,7 +122,8 @@ The worker checks `X-Twilio-Signature` whenever `TWILIO_AUTH_TOKEN` is set. Tria
 3. **Click "assign & text kids":** an even 8/8 split, and both kids get a text.
 4. **Kids' phones:** Maya taps "done with laundry". Jake taps "can maya do the table tonight? i have practice". Claude handles both, Maya gets a heads-up, and the swap stays fair (Jake takes the trash back).
 5. **Back to fairness:** a 50/50 split and 0 reminders.
-6. **Close:** "super mom gives moms their time back and teaches the next generation that chores aren't a girl's job."
+6. **Bonus, chore bids:** Maya taps "i'll do jake's bathroom for $4" and Jake taps "deal!". "and if a kid wants extra work, they get paid for it. chosen and paid, never assumed."
+7. **Close:** "super mom gives moms their time back and teaches the next generation that chores aren't a girl's job."
 
 Tap **reset** to run it again.
 
