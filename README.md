@@ -129,6 +129,7 @@ Tap **reset** to run it again.
 
 - parent onboarding: add your own kids, chores and point values in the app
 - weekly rotation that carries last week's points forward automatically
+- durable weekly workflows on [Temporal Cloud](https://temporal.io/cloud): rotate chores every Sunday, wait for each kid's "done", and send one gentle nudge only if a chore is still open the next evening, surviving restarts without losing a timer
 - age-aware chores and allowance or reward tracking
 - reminders the kids schedule themselves ("text me at 7")
 - Spanish and other languages for the texts
